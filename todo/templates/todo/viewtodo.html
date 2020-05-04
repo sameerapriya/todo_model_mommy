@@ -1,0 +1,27 @@
+{% extends 'todo/base.html' %}
+{% block content %}
+
+    {% if todo.important %}<b>{% endif %}{{ todo.title }}{% if todo.important %}</b>{% endif %}
+    {% if todo.memo %}<br>-{{ todo.memo }}{% endif %}
+    <br>
+    Time Created:{{ todo.created }}
+
+    {{ error }}
+    {% if todo.completed %}<br>Completed this task at : {{ todo.completed }}{% endif %}
+
+    <form method="POST">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <button type="submit">Update Todo</button>
+    </form>
+
+    <form method="POST" action="{% url 'completetodo' todo.id %}">
+        {% csrf_token %}
+        <button type="submit">Complete</button>
+    </form>
+
+    <form method="POST" action="{% url 'deletetodo' todo.id %}">
+        {% csrf_token %}
+        <button type="submit">Delete Todo</button>
+    </form>
+{% endblock %}

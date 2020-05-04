@@ -1,0 +1,31 @@
+<head>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/css/bootstrap.min.css" integrity="sha384-Vkoo8x4CGsO3+Hhxv8T/Q5PaXtkKtu6ug5TOeNV6gBiFeWPGFN9MuhOf23Q9Ifjh" crossorigin="anonymous">
+    <title>Todo Woo</title>
+</head>
+<body>
+{% if user.is_authenticated %}
+Logged in as {{ user.username }}
+<br>
+<a href="{% url 'createtodo' %}">Create Todo</a>
+<br>
+<a href="{% url 'completedtodo' %}">Completed Todo's</a>
+<br>
+<a href="{% url 'currenttodo' %}">Current Todo's</a>
+<br>
+<form action="{% url 'logoutuser' %}" method="POST">
+    {% csrf_token %}
+<button type="submit">Logout</button>
+</form>
+{% else %}
+<br>
+<a href="{% url 'signupuser' %}">SignUp</a>
+<br>
+<a href="{% url 'loginuser' %}">Login</a>
+{% endif %}
+
+{% block content%}
+
+
+{% endblock %}
+
+</body>

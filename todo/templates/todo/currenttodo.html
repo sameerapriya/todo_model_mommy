@@ -1,0 +1,22 @@
+{% extends 'todo/base.html' %}
+
+{% block content %}
+<br>
+{{ user.username }}'s Current Todo's
+<br>
+
+<ul>
+    {% for todo in todos %}
+    <li>
+        <a href="{% url 'viewtodo' todo.id %}">
+            {% if todo.important %}<b>{% endif %}{{ todo.title }}{% if todo.important %}</b>{% endif %}
+        </a>
+            {% if todo.memo %}<br>-{{ todo.memo }}{% endif %}
+            <br>
+            Time Created:{{ todo.created }}
+
+    </li>
+    <br>
+    {% endfor %}
+</ul>
+{% endblock %}
