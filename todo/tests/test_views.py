@@ -3,119 +3,196 @@ from django.contrib.auth import get_user_model
 from datetime import datetime
 from django.test import Client
 from django.urls import reverse
-from model_mommy import mommy
+import random,string
+from model_mommy import mommy,recipe
 from ..views import *
 from ..forms import TodoForm
 
+SIGNUP_URL = reverse('signupuser')
+LOGIN_URL = reverse('loginuser')
 
-class SignupViewTests(TestCase):
+
+class ViewTodos(TestCase):
 
     def setUp(self):
         self.client = Client()
 
-    def test_for_signup(self):
-        self.user = mommy.make(get_user_model(), username='hello', password='punkstarz1223')
-        post_data = {
-            "username": self.user.username,
-            "password1": self.user.password,
-            "password2": self.user.password,
+    def test_page_load_correctly(self):
+        res = self.client.get(SIGNUP_URL)
+        self.assertEqual(res.status_code, 200)
+        self.assertTemplateUsed(res, 'todo/signupuser.html')
+
+    def test_signup_user(self):
+        data = {
+            'username': 'hello',
+            'password1': 'blahblah123',
+            'password2': 'blahblah123'
         }
-        res = self.client.post(reverse('signupuser'),data=post_data,follow=True)
+        res = self.client.post(SIGNUP_URL,data)
+        self.assertEqual(res.status_code,302)
+        self.assertRedirects(res,reverse('currenttodo'))
+
+    def test_signup_password_not_equal(self):
+        data = {
+            'username': 'hello',
+            'password1': 'blah',
+            'password2': 'blah1'
+        }
+        res = self.client.post(SIGNUP_URL, data)
+        self.assertTrue(res.context['error'])
+
+    def test_signup_username_taken(self):
+        user1 = mommy.make('User',username='hello1',password='hello1223')
+        user1.save()
+        user2_data = {
+            'username': 'hello1',
+            'password1': 'blah',
+            'password2': 'blah'
+        }
+        res = self.client.post(SIGNUP_URL, user2_data)
+        self.assertTrue(res.context['error'],'The following username has been taken. Please enter another Username')
+
+    def test_login_successful_page_load(self):
+        res = self.client.get(LOGIN_URL)
         self.assertEqual(res.status_code,200)
+        self.assertTemplateUsed(res, 'todo/loginuser.html')
 
-    def test_logged_user_cant_signup(self):
-        self.user = mommy.make(get_user_model(), username='hello', password='punkstarz1223')
-        self.client.force_login(self.user)
-        response = self.client.get(reverse('signupuser'))
-        self.assertTrue(response.context['user'].is_authenticated)
+    def test_login_POST(self):
+        user = get_user_model().objects.create_user(username='hello',password='hello123')
+        user.save()
+        self.client.force_login(user)
+        data = {
+            'username':'hello',
+            'password':'hello123'
+        }
+        res = self.client.post(LOGIN_URL,data)
+        self.assertEqual(res.status_code,302)
+        self.assertRedirects(res,reverse('currenttodo'))
+
+    def test_login_with_invalid_credentials(self):
+        data = {
+            'username': 'hello',
+            'password': 'hello123'
+        }
+        res = self.client.post(LOGIN_URL, data)
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.context['error'],"Invalid Credentials")
 
 
-class LoginLogoutViewTests(TestCase):
+CREATE_TODO_URL = reverse('createtodo')
+CURRENT_TODO_URL = reverse('currenttodo')
+
+
+class PrivateViewTests(TestCase):
 
     def setUp(self):
+        self.user = mommy.make('User',username='hello',password='password12233')
         self.client = Client()
-        self.user = mommy.make(get_user_model())
+        self.client.force_login(self.user)
 
-    def test_successful_login(self):
-        self.user = mommy.make(get_user_model(),username='hello',password='hello123')
-        self.client.login(username=self.user.username, password=self.user.password)
-        response = self.client.get(reverse('loginuser'), follow=True)
-        user = User.objects.get(username=self.user.username)
-        self.assertTrue(user.is_authenticated)
-        self.assertEqual(response.status_code,200)
+    def test_logout(self):
+        res = self.client.post(reverse('logoutuser'),user=self.user)
+        self.assertEqual(res.status_code,302)
+        self.assertRedirects(res,reverse('home'))
 
-    def test_unsuccessful_login(self):
-        response = self.client.post(reverse('loginuser'), {
-            'username': self.user.username,
-            'password': self.user.password
-        })
-        self.assertTrue(response.context['error'])
+    def test_create_todo_get(self):
+        res = self.client.get(CREATE_TODO_URL)
+        self.assertEqual(res.status_code,200)
+        self.assertTemplateUsed(res,'todo/createtodo.html')
+        self.assertTrue(res.context['form'])
 
-    def test_logout_view(self):
-        self.client.login(username=self.user.username,password=self.user.password)
-        res = self.client.get(reverse('logoutuser'))
+    def test_create_todo_post(self):
+        data ={
+            'title': 'Get Money',
+            'memo': '2200'
+        }
+        res = self.client.post(CREATE_TODO_URL,data)
+        self.assertEqual(res.status_code,302)
+
+    def test_create_todo_bad_data(self):
+        data = {
+            'title':''.join(random.SystemRandom().choice(string.ascii_uppercase + string.digits) for _ in range(400)) ,
+            'memo': '2200'
+        }
+        res = self.client.post(CREATE_TODO_URL, data)
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.context['error'],'Bad Data passed in.Try again')
+
+    def test_current_todo(self):
+        mommy.make('Todo',user=self.user,title=recipe.seq('hello'),_quantity=5)
+        mommy.make('Todo', user=self.user,title=recipe.seq('helloii'), _quantity=5,completed=datetime(2019,5,5))
+        res = self.client.get(CURRENT_TODO_URL)
+        self.assertEqual(res.status_code,200)
+        self.assertEqual(len(res.context['todos']), 5)
+        self.assertTemplateUsed(res,'todo/currenttodo.html')
+
+    def test_view_todo_get(self):
+        mommy.make('Todo', user=self.user, title=recipe.seq('hello'), _quantity=5)
+        view_url = reverse('viewtodo',args=[1])
+        res = self.client.get(view_url)
+        self.assertEqual(res.status_code, 200)
+        self.assertIn('hello',res.context['todo'].title)
+        view_url = reverse('viewtodo', args=[6])
+        res = self.client.get(view_url)
+        self.assertEqual(res.status_code, 404)
+
+    def test_view_todo_post(self):
+        mommy.make('Todo', user=self.user, title=recipe.seq('hello'), _quantity=3)
+        data={
+            'title':'helloblah',
+            'important':True
+        }
+        view_url = reverse('viewtodo', args=[1])
+        res = self.client.post(view_url,data)
         self.assertEqual(res.status_code, 302)
 
+    def test_view_todo_post_baddata(self):
+        mommy.make('Todo', user=self.user, title=recipe.seq('hello'), _quantity=3)
+        data = {
+            'title': ''.join(random.SystemRandom().choice(string.ascii_letters) for _ in range(400)),
+            'important': True
+        }
+        view_url = reverse('viewtodo', args=[1])
+        res = self.client.post(view_url, data)
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.context['error'],'Bad Info Provided')
 
-class TodoViews(TestCase):
+    def test_complete_todo_post(self):
+        mommy.make('Todo', user=self.user, title=recipe.seq('hello'), _quantity=3)
+        url = reverse('completetodo',args=[2])
+        data = {
+            'completed':datetime(2020,4,2)
+        }
+        res = self.client.post(url,data)
+        self.assertEqual(res.status_code,302)
 
-    def setUp(self):
-        self.user = mommy.make(get_user_model())
-        self.todo = mommy.make(Todo,user=self.user)
-        self.client = Client()
-        self.client.force_login(user=self.user)
-
-    def test_view_currenttodo(self):
-        res = self.client.get(reverse('currenttodo'))
-        self.assertTrue(res.status_code,200)
-        self.todo = mommy.make(Todo,completed=datetime.now())
-        self.assertTrue(res.context['todos'])
-
-    def test_createtodo(self):
-        res = self.client.get(reverse('createtodo'))
-        self.assertTrue(res.status_code, 200)
-        self.assertIsInstance(res.context['form'], TodoForm)
-
-    def test_viewtodo(self):
-        res = self.client.get(reverse('viewtodo',args=[self.todo.id]))
-        self.assertTrue(res.status_code,200)
-        self.assertTrue(res.context['todo'])
-        todo = Todo.objects.get(pk=self.todo.id)
-        res =  self.client.get(reverse('viewtodo',args=[todo.id]))
-        self.assertTrue(res.status_code,200)
-        self.assertIsInstance(res.context['form'], TodoForm)
-
-    def test_complete_todo(self):
-        self.todo = mommy.make(Todo, completed=datetime.now())
-        res = self.client.get(reverse('completetodo',args=[self.todo.id]))
-        self.assertTrue(res.status_code, 200)
-
-    def test_completed_todo(self):
-        self.todo = mommy.make(Todo, completed=datetime.now())
-        res = self.client.get(reverse('completedtodo'))
-        self.assertTrue(res.status_code, 200)
-        self.assertFalse(res.context['todos'])
+    def test_complete_todo_invalid_pk(self):
+        mommy.make('Todo', user=self.user, title=recipe.seq('hello'), _quantity=3)
+        url = reverse('completetodo', args=[66])
+        data = {
+            'completed': datetime(2020, 4, 2)
+        }
+        res = self.client.post(url, data)
+        self.assertEqual(res.status_code, 404)
 
     def test_delete_todo(self):
-        self.todo = mommy.make(Todo)
-        Todo.objects.filter(id=self.todo.id).delete()
+        mommy.make('Todo', user=self.user, title=recipe.seq('hello'), _quantity=3)
+        url = reverse('deletetodo', args=[3])
+        data={}
+        res = self.client.post(url, data)
+        self.assertEqual(res.status_code, 302)
 
+    def test_delete_todo_invalid(self):
+        mommy.make('Todo', user=self.user, title=recipe.seq('hello'), _quantity=3)
+        url = reverse('deletetodo', args=[99])
+        data = {}
+        res = self.client.post(url, data)
+        self.assertEqual(res.status_code, 404)
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    def test_completed_todo(self):
+        mommy.make('Todo', user=self.user, title=recipe.seq('hello'), _quantity=3)
+        mommy.make('Todo', user=self.user, title=recipe.seq('hello112'), _quantity=5,completed=datetime(2020,5,4))
+        url = reverse('completedtodo')
+        res = self.client.get(url)
+        self.assertEqual(res.status_code,200)
+        self.assertEqual(len(res.context['todos']),5)
